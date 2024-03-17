@@ -1,6 +1,9 @@
 # Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
 
+config SHIELD_DONGLE_DISPLAY
+    bool "Enable 0.91 OLED widget for dongle"
+
 if SHIELD_DONGLE_DISPLAY
 
 choice ZMK_DISPLAY_STATUS_SCREEN
