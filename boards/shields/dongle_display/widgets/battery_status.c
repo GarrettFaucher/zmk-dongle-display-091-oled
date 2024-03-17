@@ -33,7 +33,7 @@ struct battery_widget_object {
 struct battery_widget_object battery_widget_objects[ZMK_SPLIT_BLE_PERIPHERAL_COUNT];
 
 static void set_battery_symbol(lv_obj_t *widget, struct battery_status_state state) {
-    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
+    for (int i = ZMK_SPLIT_BLE_PERIPHERAL_COUNT - 1; i >= 0; i--) {  // Iterate backwards
         uint8_t level = state.level[i];
         lv_obj_t *label = battery_widget_objects[i].battery_label;
         
@@ -68,11 +68,13 @@ int zmk_widget_peripheral_battery_status_init(struct zmk_widget_peripheral_batte
 
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
+    // Calculate initial x-offset for the rightmost label
+    int initial_x_offset = (ZMK_SPLIT_BLE_PERIPHERAL_COUNT - 1) * 35;
+
+    for (int i = ZMK_SPLIT_BLE_PERIPHERAL_COUNT - 1; i >= 0; i--) {  // Iterate backwards
         battery_widget_objects[i].battery_label = lv_label_create(widget->obj);
 
-        // Adjust label alignment for horizontal layout
-        lv_obj_align(battery_widget_objects[i].battery_label, LV_ALIGN_LEFT_MID, i * 35, 0);
+        lv_obj_align(battery_widget_objects[i].battery_label, LV_ALIGN_LEFT_MID, initial_x_offset - i * 35, 0);
     }
 
     sys_slist_append(&widgets, &widget->node);
