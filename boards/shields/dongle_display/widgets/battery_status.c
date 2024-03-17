@@ -72,7 +72,7 @@ int zmk_widget_peripheral_battery_status_init(struct zmk_widget_peripheral_batte
         battery_widget_objects[i].battery_label = lv_label_create(widget->obj);
 
         // Adjust label alignment for horizontal layout
-        lv_obj_align(battery_widget_objects[i].battery_label, LV_ALIGN_LEFT_MID, i * 20, 0);
+        lv_obj_align(battery_widget_objects[i].battery_label, LV_ALIGN_LEFT_MID, i * 35, 0);
     }
 
     sys_slist_append(&widgets, &widget->node);
