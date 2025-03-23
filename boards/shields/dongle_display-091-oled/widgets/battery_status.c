@@ -11,7 +11,7 @@
 #include <lvgl.h>
 #include <stdio.h>
 
-#include <zmk/events/peripheral_battery_state_changed.h>
+#include <zmk/events/battery_state_changed.h>
 
 #ifndef ZMK_SPLIT_BLE_PERIPHERAL_COUNT
 #define ZMK_SPLIT_BLE_PERIPHERAL_COUNT 2
@@ -27,7 +27,7 @@ static struct battery_status_state battery_state;
 /* Array to track which peripheral slots are active */
 static bool battery_active[ZMK_SPLIT_BLE_PERIPHERAL_COUNT] = { false };
 
-/* Widget instance for displaying a battery status. */
+/* Widget instance for displaying a battery status */
 struct zmk_widget_peripheral_battery_status {
     struct sys_snode_t node;
     lv_obj_t *obj;
@@ -44,13 +44,10 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static void set_battery_symbols(lv_obj_t *container, const struct battery_status_state *state)
 {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
-        /* If this slot is inactive, clear the label */
         if (!battery_active[i]) {
             lv_label_set_text(battery_labels[i], "");
             continue;
         }
-
-        /* Display the battery level as a percentage. Adjust here if you prefer icons */
         char text[5];
         snprintf(text, sizeof(text), "%d%%", state->level[i]);
         lv_label_set_text(battery_labels[i], text);
@@ -60,6 +57,8 @@ static void set_battery_symbols(lv_obj_t *container, const struct battery_status
 /* Event handler for peripheral battery events */
 static int battery_status_event_handler(const zmk_event_t *eh)
 {
+    /* Convert the event to a peripheral battery event.
+    In your configuration, the helper function should work from the battery_state_changed header. */
     const struct zmk_peripheral_battery_state_changed *ev = as_zmk_peripheral_battery_state_changed(eh);
     if (ev) {
         uint8_t idx = ev->index;
@@ -68,7 +67,6 @@ static int battery_status_event_handler(const zmk_event_t *eh)
             battery_active[idx] = true;
         }
 
-        /* Update all registered widgets */
         struct zmk_widget_peripheral_battery_status *widget;
         SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
             set_battery_symbols(widget->obj, &battery_state);
@@ -84,11 +82,9 @@ int zmk_widget_peripheral_battery_status_init(struct zmk_widget_peripheral_batte
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    /* Create labels for each battery slot.
-    Arrange them horizontally with a spacing of 35px. */
+    /* Create labels for each battery slot arranged horizontally with 35px spacing */
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         battery_labels[i] = lv_label_create(widget->obj);
-        /* Align from left side: each label offset by i*35 px */
         lv_obj_align(battery_labels[i], LV_ALIGN_LEFT_MID, i * 35, 0);
         lv_label_set_text(battery_labels[i], "");
     }
