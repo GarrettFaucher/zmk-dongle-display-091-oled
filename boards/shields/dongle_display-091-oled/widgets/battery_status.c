@@ -32,7 +32,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* Global widget list */
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
-/* This structure is used to store battery state for a given slot */
+/* This structure stores battery state for a given slot */
 struct battery_state {
     uint8_t source;
     uint8_t level;
@@ -97,9 +97,9 @@ static void update_widget_from_global_state(lv_obj_t *widget)
     }
 }
 
-/* Callback that is called when battery events update the state.
-Instead of using the passed state directly, we refresh the entire widget
-from our global persistent battery_states array. */
+/* Callback invoked when battery events update the state.
+Refresh the entire widget from our global persistent battery_states array.
+*/
 void battery_status_update_cb(struct battery_state state)
 {
     struct zmk_widget_dongle_battery_status *widget;
@@ -109,7 +109,7 @@ void battery_status_update_cb(struct battery_state state)
 }
 
 /* Process a peripheral battery event: update the corresponding slot.
-Note: Use 'source' (not 'index') as defined in the event struct.
+Use 'source' (plus SOURCE_OFFSET) to select the slot.
 */
 static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh)
 {
@@ -170,16 +170,16 @@ int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_statu
 
     /* Create display elements for each slot.
     Each slot gets two children: an image canvas and a label.
-    Adjust the alignment as desired. */
+    Here, we stack them tightly using an offset equal to the icon height (8 pixels). */
     for (int i = 0; i < TOTAL_SLOTS; i++) {
         lv_obj_t *image_canvas = lv_canvas_create(widget->obj);
         lv_obj_t *battery_label = lv_label_create(widget->obj);
 
         lv_canvas_set_buffer(image_canvas, battery_image_buffer[i], 5, 8, LV_IMG_CF_TRUE_COLOR);
 
-        /* Here we use a vertical offset (i * 10) so that each slot appears separately. */
-        lv_obj_align(image_canvas, LV_ALIGN_TOP_RIGHT, 0, i * 10);
-        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 10);
+        /* Use vertical offset i * 8 for tight stacking */
+        lv_obj_align(image_canvas, LV_ALIGN_TOP_RIGHT, 0, i * 8);
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 8);
 
         lv_obj_add_flag(image_canvas, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
