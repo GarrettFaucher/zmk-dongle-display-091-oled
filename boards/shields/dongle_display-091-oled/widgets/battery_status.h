@@ -9,7 +9,7 @@
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 
-struct zmk_widget_dongle_battery_status {
+struct zmk_widget_peripheral_battery_status {
     sys_snode_t node;
     lv_obj_t *obj;
 };
