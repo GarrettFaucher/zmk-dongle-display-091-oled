@@ -33,7 +33,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define TOTAL_SLOTS (ZMK_SPLIT_BLE_PERIPHERAL_COUNT + SOURCE_OFFSET)
 
 /* Threshold (in percent) for matching battery levels */
-#define BATTERY_THRESHOLD 5
+#define BATTERY_THRESHOLD 2
 
 /* Increase the horizontal spacing so the labels do not overlap.
 Adjust this value as needed.
