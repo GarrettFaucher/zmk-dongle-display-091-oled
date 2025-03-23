@@ -35,17 +35,13 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* Threshold (in percent) for matching battery levels */
 #define BATTERY_THRESHOLD 2
 
-/* Increase the horizontal spacing so the labels do not overlap.
-Adjust this value as needed.
-*/
+/* Horizontal spacing (in pixels) between battery labels */
 #define LABEL_SPACING 40
 
 /* Global widget list */
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
-/* 
-* Timer to refresh the display more frequently in case one half is missing.
-*/
+/* Timer to poll the display every second */
 static struct k_timer battery_poll_timer;
 static bool battery_poll_timer_started = false;
 
@@ -63,7 +59,7 @@ static struct battery_state battery_states[TOTAL_SLOTS];
 static bool battery_state_valid[TOTAL_SLOTS] = { false };
 
 /*
-* In this version we display only the battery percentage.
+* We display only the battery percentage.
 * Update each widget's display by iterating over all battery slots.
 * Each slot is represented by a single LVGL label.
 */
@@ -90,8 +86,7 @@ void battery_status_update_cb(struct battery_state state) {
 }
 
 /*
-* Timer handler: Called every second to force a refresh.
-* This will help “scan” more quickly if both halves are not yet present.
+* Timer handler: Called every second to force a display refresh.
 */
 static void battery_poll_timer_handler(struct k_timer *timer) {
     struct zmk_widget_dongle_battery_status *widget;
@@ -132,7 +127,8 @@ static int find_empty_slot(void) {
 
 /*
 * Process a peripheral battery event.
-* Instead of using the event's 'source' field directly, we use the reported battery level.
+* Instead of using the event's 'source' field to choose the slot,
+* we use the reported battery level.
 * If the reading is 0%, we clear that slot (do not display it).
 */
 static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh) {
@@ -211,13 +207,15 @@ ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_usb_conn_state_changed);
 /*
 * Initialize the battery status widget:
 * - Create one LVGL label for each slot.
-* - Arrange them horizontally from right to left, so slot 0 is at the top-right,
+* - Arrange them horizontally from right to left so that slot 0 is at the top-right,
 *   and subsequent batteries appear to its left.
-* - Start a timer to poll (refresh) the display every second if both halves are not present.
+* - Set the container width to accommodate all labels.
+* - Start a timer to poll (refresh) the display every second.
 */
 int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
-    lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    /* Set width to accommodate all slots */
+    lv_obj_set_size(widget->obj, TOTAL_SLOTS * LABEL_SPACING + 20, LV_SIZE_CONTENT);
     
     for (int i = 0; i < TOTAL_SLOTS; i++) {
         lv_obj_t *battery_label = lv_label_create(widget->obj);
@@ -234,9 +232,7 @@ int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_statu
     /* Initialize the display listener */
     widget_dongle_battery_status_init();
 
-    /* Start the polling timer if it hasn't been started yet.
-    This timer forces a display refresh every second.
-    */
+    /* Start the polling timer if not already started */
     if (!battery_poll_timer_started) {
         k_timer_init(&battery_poll_timer, battery_poll_timer_handler, NULL);
         k_timer_start(&battery_poll_timer, K_SECONDS(1), K_SECONDS(1));
