@@ -3,13 +3,12 @@
 *
 * SPDX-License-Identifier: MIT
 */
-#include "battery_status.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/slist.h>
-#include <lvgl/lvgl.h>
+#include <lvgl.h>
 #include <stdio.h>
 
 #include <zmk/events/peripheral_battery_state_changed.h>
@@ -35,7 +34,7 @@ struct zmk_widget_peripheral_battery_status {
 };
 
 /* For simplicity, we assume one set of LVGL label objects for battery display.
-   They are arranged horizontally, 35px apart. */
+They are arranged horizontally, 35px apart. */
 static lv_obj_t *battery_labels[ZMK_SPLIT_BLE_PERIPHERAL_COUNT];
 
 /* Linked list of battery status widgets that need updating */
@@ -86,7 +85,7 @@ int zmk_widget_peripheral_battery_status_init(struct zmk_widget_peripheral_batte
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
     /* Create labels for each battery slot.
-       Arrange them horizontally with a spacing of 35px. */
+    Arrange them horizontally with a spacing of 35px. */
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         battery_labels[i] = lv_label_create(widget->obj);
         /* Align from left side: each label offset by i*35 px */
