@@ -6,7 +6,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/services/bas.h>
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -20,8 +19,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "battery_status.h"
 
-/* SOURCE_OFFSET reserves slot 0 for the central battery if needed.
-Set to 0 if you are only using peripherals. */
+/* 
+* SOURCE_OFFSET reserves slot 0 for the central battery if needed.
+* If using only peripherals, set this to 0.
+*/
 #if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_DONGLE_BATTERY)
     #define SOURCE_OFFSET 1
 #else
@@ -31,15 +32,18 @@ Set to 0 if you are only using peripherals. */
 /* TOTAL_SLOTS covers the central (if any) plus all peripherals */
 #define TOTAL_SLOTS (ZMK_SPLIT_BLE_PERIPHERAL_COUNT + SOURCE_OFFSET)
 
-/* Threshold for considering two battery levels "the same" (in percent) */
+/* Threshold (in percent) for matching battery levels */
 #define BATTERY_THRESHOLD 5
+
+/* Horizontal spacing (in pixels) between battery labels */
+#define LABEL_SPACING 20
 
 /* Global widget list */
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 /* This structure stores battery state for a given slot.
-Here, 'source' is not taken from the event anymore—it will be assigned
-based on which slot we match/update. */
+The 'source' field is now just the assigned slot index.
+*/
 struct battery_state {
     uint8_t source;
     uint8_t level;
@@ -50,53 +54,22 @@ struct battery_state {
 static struct battery_state battery_states[TOTAL_SLOTS];
 static bool battery_state_valid[TOTAL_SLOTS] = { false };
 
-/* Buffer for drawing battery icons (one per slot) */
-static lv_color_t battery_image_buffer[TOTAL_SLOTS][5 * 8];
+/*
+* Instead of drawing a battery icon, we only use a label to display
+* the battery percentage.
+*/
 
-/* Draw a battery icon on the provided canvas */
-static void draw_battery(lv_obj_t *canvas, uint8_t level, bool usb_present) {
-    lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_COVER);
-    
-    lv_draw_rect_dsc_t rect_fill_dsc;
-    lv_draw_rect_dsc_init(&rect_fill_dsc);
-
-    if (usb_present) {
-        rect_fill_dsc.bg_opa = LV_OPA_TRANSP;
-        rect_fill_dsc.border_color = lv_color_white();
-        rect_fill_dsc.border_width = 1;
-    }
-
-    lv_canvas_set_px(canvas, 0, 0, lv_color_white());
-    lv_canvas_set_px(canvas, 4, 0, lv_color_white());
-
-    if (level <= 10 || usb_present) {
-        lv_canvas_draw_rect(canvas, 1, 2, 3, 5, &rect_fill_dsc);
-    } else if (level <= 30) {
-        lv_canvas_draw_rect(canvas, 1, 2, 3, 4, &rect_fill_dsc);
-    } else if (level <= 50) {
-        lv_canvas_draw_rect(canvas, 1, 2, 3, 3, &rect_fill_dsc);
-    } else if (level <= 70) {
-        lv_canvas_draw_rect(canvas, 1, 2, 3, 2, &rect_fill_dsc);
-    } else if (level <= 90) {
-        lv_canvas_draw_rect(canvas, 1, 2, 3, 1, &rect_fill_dsc);
-    }
-}
-
-/* Update each widget's display by iterating over all battery slots */
+/* Update each widget's display by iterating over all battery slots.
+Each slot is represented by a single LVGL label.
+*/
 static void update_widget_from_global_state(lv_obj_t *widget) {
     for (int i = 0; i < TOTAL_SLOTS; i++) {
-        /* Each battery slot is represented by two children:
-        child index i*2: battery icon (canvas)
-        child index i*2 + 1: battery percentage label */
-        lv_obj_t *symbol = lv_obj_get_child(widget, i * 2);
-        lv_obj_t *label = lv_obj_get_child(widget, i * 2 + 1);
+        /* Get the label corresponding to this slot. */
+        lv_obj_t *label = lv_obj_get_child(widget, i);
         if (battery_state_valid[i]) {
-            draw_battery(symbol, battery_states[i].level, battery_states[i].usb_present);
-            lv_label_set_text_fmt(label, "%4u%%", battery_states[i].level);
-            lv_obj_clear_flag(symbol, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text_fmt(label, "%3u%%", battery_states[i].level);
             lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
         } else {
-            lv_obj_add_flag(symbol, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -113,15 +86,13 @@ void battery_status_update_cb(struct battery_state state) {
 }
 
 /* 
-* Helper function: given a new battery level, try to find an existing slot
-* whose stored level is within BATTERY_THRESHOLD percent.
-* If found, return its index.
-* Otherwise, return -1.
+* Helper: Find a matching slot if an existing battery level is within BATTERY_THRESHOLD.
+* Searches from SOURCE_OFFSET onward (to reserve slot 0 for the central battery if needed).
 */
 static int find_matching_slot(uint8_t new_level) {
-    for (int i = SOURCE_OFFSET; i < TOTAL_SLOTS; i++) { // Reserve slot 0 for central if needed
+    for (int i = SOURCE_OFFSET; i < TOTAL_SLOTS; i++) {
         if (battery_state_valid[i]) {
-            int diff = (battery_states[i].level > new_level) ? 
+            int diff = (battery_states[i].level > new_level) ?
                         battery_states[i].level - new_level : new_level - battery_states[i].level;
             if (diff <= BATTERY_THRESHOLD) {
                 return i;
@@ -131,22 +102,19 @@ static int find_matching_slot(uint8_t new_level) {
     return -1;
 }
 
-/* 
-* Helper function: find an empty slot for a new battery reading.
-* Searches from SOURCE_OFFSET onward.
-*/
+/* Helper: Find an empty slot for a new battery reading. */
 static int find_empty_slot(void) {
     for (int i = SOURCE_OFFSET; i < TOTAL_SLOTS; i++) {
         if (!battery_state_valid[i]) {
             return i;
         }
     }
-    return -1; // No empty slot found
+    return -1; // All slots in use.
 }
 
 /* Process a peripheral battery event:
 Instead of using the event's 'source' field for the slot,
-we match the battery level within a ±5% range.
+we match the battery level within a ±BATTERY_THRESHOLD range.
 If no matching slot is found, we use an empty slot.
 */
 static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh) {
@@ -154,11 +122,10 @@ static struct battery_state peripheral_battery_status_get_state(const zmk_event_
     if (ev) {
         int idx = find_matching_slot(ev->state_of_charge);
         if (idx == -1) {
-            /* No matching slot found; try to get an empty one */
             idx = find_empty_slot();
             if (idx == -1) {
-                /* All slots in use; you may choose to replace one or ignore the event */
-                idx = SOURCE_OFFSET;  // Fallback: update the first peripheral slot
+                /* Fallback: update the first peripheral slot */
+                idx = SOURCE_OFFSET;
             }
         }
         battery_states[idx].source = idx;
@@ -170,14 +137,14 @@ static struct battery_state peripheral_battery_status_get_state(const zmk_event_
     return (struct battery_state){0};
 }
 
-/* Process a central battery event: update slot 0 */
+/* Process a central battery event: update slot 0. */
 static struct battery_state central_battery_status_get_state(const zmk_event_t *eh) {
     const struct zmk_battery_state_changed *ev = as_zmk_battery_state_changed(eh);
     battery_states[0].source = 0;
     battery_states[0].level = (ev != NULL) ? ev->state_of_charge : zmk_battery_state_of_charge();
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
     battery_states[0].usb_present = zmk_usb_is_powered();
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
+#endif
     battery_state_valid[0] = true;
     return battery_states[0];
 }
@@ -204,31 +171,29 @@ ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_peripheral_battery_state_chan
 ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_battery_state_changed);
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_usb_conn_state_changed);
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
-#endif /* !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) */
-#endif /* IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_DONGLE_BATTERY) */
+#endif
+#endif
+#endif
 
 /* Initialize the battery status widget:
-- Create the LVGL objects (canvas and label) for each slot.
-- Stack them vertically with a tight offset (here: i * 10 pixels; adjust as needed).
+- Create one LVGL label for each slot.
+- Arrange them left-to-right such that the first battery (slot 0) is anchored at the top-right,
+    and subsequent batteries appear to its left.
 */
 int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     
     for (int i = 0; i < TOTAL_SLOTS; i++) {
-        lv_obj_t *image_canvas = lv_canvas_create(widget->obj);
+        /* Create one label per slot */
         lv_obj_t *battery_label = lv_label_create(widget->obj);
+        lv_label_set_text(battery_label, ""); // Start empty
 
-        lv_canvas_set_buffer(image_canvas, battery_image_buffer[i], 5, 8, LV_IMG_CF_TRUE_COLOR);
-
-        /* Use vertical offset i * 10 for stacking.
-        If you want them tighter, reduce this value (e.g. i * 8). */
-        lv_obj_align(image_canvas, LV_ALIGN_TOP_RIGHT, 0, i * 10);
-        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 10);
-
-        lv_obj_add_flag(image_canvas, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        /* 
+        * Arrange the labels horizontally.
+        * Slot 0 is anchored to the top-right, and each subsequent slot is offset left.
+        */
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -i * LABEL_SPACING, 0);
     }
 
     sys_slist_append(&widgets, &widget->node);
