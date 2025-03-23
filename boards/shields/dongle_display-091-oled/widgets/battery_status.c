@@ -20,37 +20,44 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "battery_status.h"
 
+/* SOURCE_OFFSET reserves slot 0 for the central battery if needed.
+If you’re only using peripherals, set this to 0. */
 #if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_DONGLE_BATTERY)
     #define SOURCE_OFFSET 1
 #else
     #define SOURCE_OFFSET 0
 #endif
 
-/* TOTAL_SLOTS covers the central (if any) plus all peripherals */
+/* TOTAL_SLOTS covers the central (if any) plus all peripherals.
+This is where the unique battery events will be mapped. */
 #define TOTAL_SLOTS (ZMK_SPLIT_BLE_PERIPHERAL_COUNT + SOURCE_OFFSET)
 
-/* Global widget list */
+/* Global widget list for all battery display widgets */
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
-/* This structure stores battery state for a given slot */
+/* This structure stores battery state for a given slot.
+The 'source' field (from the event) acts as a unique identifier.
+Ensure that each peripheral sends a unique 'source' value. */
 struct battery_state {
     uint8_t source;
     uint8_t level;
     bool usb_present;
 };
 
-/* Global persistent state for each battery slot */
+/* Global persistent state for each battery slot.
+Each peripheral’s battery event updates the corresponding slot,
+using the unique 'source' value as an index. */
 static struct battery_state battery_states[TOTAL_SLOTS];
 static bool battery_state_valid[TOTAL_SLOTS] = { false };
 
 /* Buffer for drawing battery icons (one per slot) */
 static lv_color_t battery_image_buffer[TOTAL_SLOTS][5 * 8];
 
-/* Draw a battery icon on the provided canvas */
-static void draw_battery(lv_obj_t *canvas, uint8_t level, bool usb_present)
-{
+/* Draw a battery icon on the provided canvas.
+(This function remains unchanged.) */
+static void draw_battery(lv_obj_t *canvas, uint8_t level, bool usb_present) {
     lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_COVER);
-
+    
     lv_draw_rect_dsc_t rect_fill_dsc;
     lv_draw_rect_dsc_init(&rect_fill_dsc);
 
@@ -76,13 +83,14 @@ static void draw_battery(lv_obj_t *canvas, uint8_t level, bool usb_present)
     }
 }
 
-/* Update each widget's display by iterating over all battery slots */
-static void update_widget_from_global_state(lv_obj_t *widget)
-{
+/* Update the widget display from the global battery state.
+This function goes through each slot and either displays the battery
+level or hides the slot if no valid data is present. */
+static void update_widget_from_global_state(lv_obj_t *widget) {
     for (int i = 0; i < TOTAL_SLOTS; i++) {
         /* Each battery slot is represented by two children:
-        child index i*2: battery icon (canvas)
-        child index i*2 + 1: battery percentage label */
+        - Child index i*2: battery icon (canvas)
+        - Child index i*2 + 1: battery percentage label */
         lv_obj_t *symbol = lv_obj_get_child(widget, i * 2);
         lv_obj_t *label = lv_obj_get_child(widget, i * 2 + 1);
         if (battery_state_valid[i]) {
@@ -98,24 +106,23 @@ static void update_widget_from_global_state(lv_obj_t *widget)
 }
 
 /* Callback invoked when battery events update the state.
-Refresh the entire widget from our global persistent battery_states array.
-*/
-void battery_status_update_cb(struct battery_state state)
-{
+This refreshes every widget with the current global battery state. */
+void battery_status_update_cb(struct battery_state state) {
     struct zmk_widget_dongle_battery_status *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         update_widget_from_global_state(widget->obj);
     }
 }
 
-/* Process a peripheral battery event: update the corresponding slot.
-Use 'source' (plus SOURCE_OFFSET) to select the slot.
+/* Process a peripheral battery event:
+- Extract the event using as_zmk_peripheral_battery_state_changed().
+- Use the event’s 'source' field (plus SOURCE_OFFSET) as a unique identifier.
+- Make sure each peripheral sends a unique 'source' value.
 */
-static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh)
-{
+static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh) {
     const struct zmk_peripheral_battery_state_changed *ev = as_zmk_peripheral_battery_state_changed(eh);
     if (ev) {
-        uint8_t idx = ev->source + SOURCE_OFFSET;
+        uint8_t idx = ev->source + SOURCE_OFFSET;  // Unique slot index based on the event's source
         if (idx < TOTAL_SLOTS) {
             battery_states[idx].source = idx;
             battery_states[idx].level = ev->state_of_charge;
@@ -128,8 +135,7 @@ static struct battery_state peripheral_battery_status_get_state(const zmk_event_
 }
 
 /* Process a central battery event: update slot 0. */
-static struct battery_state central_battery_status_get_state(const zmk_event_t *eh)
-{
+static struct battery_state central_battery_status_get_state(const zmk_event_t *eh) {
     const struct zmk_battery_state_changed *ev = as_zmk_battery_state_changed(eh);
     battery_states[0].source = 0;
     battery_states[0].level = (ev != NULL) ? ev->state_of_charge : zmk_battery_state_of_charge();
@@ -140,9 +146,8 @@ static struct battery_state central_battery_status_get_state(const zmk_event_t *
     return battery_states[0];
 }
 
-/* Depending on the event, update the corresponding slot. */
-static struct battery_state battery_status_get_state(const zmk_event_t *eh)
-{
+/* Select the correct battery state getter based on the event type */
+static struct battery_state battery_status_get_state(const zmk_event_t *eh) { 
     if (as_zmk_peripheral_battery_state_changed(eh) != NULL) {
         return peripheral_battery_status_get_state(eh);
     } else {
@@ -150,8 +155,12 @@ static struct battery_state battery_status_get_state(const zmk_event_t *eh)
     }
 }
 
+/*
+* Register the widget listener and subscriptions.
+* These macros hook into the ZMK event system.
+*/
 ZMK_DISPLAY_WIDGET_LISTENER(widget_dongle_battery_status, struct battery_state,
-                battery_status_update_cb, battery_status_get_state)
+                            battery_status_update_cb, battery_status_get_state)
 
 ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_peripheral_battery_state_changed);
 #if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_DONGLE_BATTERY)
@@ -163,23 +172,24 @@ ZMK_SUBSCRIPTION(widget_dongle_battery_status, zmk_usb_conn_state_changed);
 #endif /* !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) */
 #endif /* IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_DONGLE_BATTERY) */
 
-int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_status *widget, lv_obj_t *parent)
-{
+/* Initialize the battery status widget:
+- Create the LVGL objects (canvas and label) for each slot.
+- Stack them vertically with a tight offset (i * 10 pixels in this case; adjust as needed).
+*/
+int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-
-    /* Create display elements for each slot.
-    Each slot gets two children: an image canvas and a label.
-    Here, we stack them tightly using an offset equal to the icon height (8 pixels). */
+    
     for (int i = 0; i < TOTAL_SLOTS; i++) {
         lv_obj_t *image_canvas = lv_canvas_create(widget->obj);
         lv_obj_t *battery_label = lv_label_create(widget->obj);
 
         lv_canvas_set_buffer(image_canvas, battery_image_buffer[i], 5, 8, LV_IMG_CF_TRUE_COLOR);
 
-        /* Use vertical offset i * 8 for tight stacking */
-        lv_obj_align(image_canvas, LV_ALIGN_TOP_RIGHT, 0, i * 8);
-        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 8);
+        /* Adjust vertical alignment as desired.
+        Here we're using a 10-pixel offset. Change this if you want tighter stacking. */
+        lv_obj_align(image_canvas, LV_ALIGN_TOP_RIGHT, 0, i * 10);
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 10);
 
         lv_obj_add_flag(image_canvas, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
@@ -193,7 +203,6 @@ int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_statu
     return 0;
 }
 
-lv_obj_t *zmk_widget_dongle_battery_status_obj(struct zmk_widget_dongle_battery_status *widget)
-{
+lv_obj_t *zmk_widget_dongle_battery_status_obj(struct zmk_widget_dongle_battery_status *widget) {
     return widget->obj;
 }
