@@ -35,7 +35,6 @@ struct battery_state {
 };
 
 struct battery_object {
-    lv_obj_t *symbol;
     lv_obj_t *label;
 } battery_objects[ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT + SOURCE_OFFSET];
     
@@ -44,18 +43,14 @@ static void set_battery_symbol(lv_obj_t *widget, struct battery_state state) {
         return;
     }
     LOG_DBG("source: %d, level: %d, usb: %d", state.source, state.level, state.usb_present);
-    lv_obj_t *symbol = battery_objects[state.source].symbol;
     lv_obj_t *label = battery_objects[state.source].label;
 
     lv_label_set_text_fmt(label, "%4u%%", state.level);
     
     if (state.level > 0 || state.usb_present) {
-        lv_obj_clear_flag(symbol, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(symbol);
         lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(label);
     } else {
-        lv_obj_add_flag(symbol, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
     }
 }
