@@ -115,7 +115,7 @@ int zmk_widget_dongle_battery_status_init(struct zmk_widget_dongle_battery_statu
     for (int i = 0; i < ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT + SOURCE_OFFSET; i++) {
         lv_obj_t *battery_label = lv_label_create(widget->obj);
 
-        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -7, i * 10);
+        lv_obj_align(battery_label, LV_ALIGN_LEFT_MID, i * 35, 0);
 
         lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
         
